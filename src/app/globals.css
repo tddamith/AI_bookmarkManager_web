@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/* Tidypin design tokens — see DESIGN.md */
+@theme inline {
+  --color-ink: #111111;
+  --color-ink-soft: #2a2a2a;
+  --color-ink-muted: #3a3a3a;
+  --color-ink-strong: #000000;
+  --color-paper: #f4f4f1;
+  --color-white: #ffffff;
+  --color-lime: #d4fa1e;
+  --color-lime-deep: #c2e80c;
+  --color-sky: #a6c3dd;
+  --color-sand: #c9b597;
+  --color-footer-text: #d0d0d0;
+  --color-line-dark: #3a3a3a;
+  --color-disabled: #a3a3a3;
+
+  --font-sans: var(--font-inter-tight), system-ui, sans-serif;
+
+  --radius-pill: 9999px;
+  --radius-card: 28px;
+  --radius-panel: 18px;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 16px;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Focus: 2px black ring, 3px out — visible on any background */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-paper), 0 0 0 5px var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ---------- Motion & parallax (CSS-only, no JS, SSR-safe) ----------
+   Scroll-driven animations (animation-timeline) run on the compositor.
+   Browsers without support, and users who prefer reduced motion, simply
+   see the final static layout. */
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mock-in {
+  from { opacity: 0; transform: translateY(40px) scale(0.96) rotate(1.5deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Page-load entrance (works everywhere) */
+  .hero-in {
+    animation: hero-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--d, 0) * 90ms + 80ms);
+  }
+  .mock-in {
+    animation: mock-in 1s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+  }
+  .float {
+    animation: float 4s ease-in-out infinite;
+  }
+
+  /* Hover micro-interactions */
+  .lift {
+    /* individual transform properties so they don't fight scroll animations */
+    transition: translate 0.35s cubic-bezier(0.22, 1, 0.36, 1), rotate 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .lift:hover {
+    translate: 0 -8px;
+    rotate: -0.6deg;
+  }
+  .nudge svg {
+    transition: transform 0.25s ease;
+  }
+  .nudge:hover svg {
+    transform: translateY(3px);
+  }
+}
+
+/* Parallax/reveal now live in Framer Motion (src/components/motion). Layers must never widen the page. */
+section,
+header {
+  overflow-x: clip;
+}
+
