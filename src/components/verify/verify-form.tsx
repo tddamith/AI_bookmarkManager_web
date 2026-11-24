@@ -7,11 +7,15 @@ import { ArrowRight } from "@/components/ui/icons";
 type Phase = "enter" | "ok";
 
 /** 6-digit email code entry. A hidden input holds the value; the boxes are display only (as in the design). */
-export function VerifyForm({ name, next }: { name: string | null; next: string }) {
+export type Prefill = { code: string; autocopy: boolean };
+
+export function VerifyForm({ name, next, prefill = null, mismatch = false }: { name: string | null; next: string; prefill?: Prefill | null; mismatch?: boolean }) {
   const router = useRouter();
   const id = useId();
-  const sentOnce = useRef(false);
-  const [code, setCode] = useState("");
+  // Arriving from the email link: the emailed code is still valid, so don't send (and replace it with) a new one.
+  const sentOnce = useRef(Boolean(prefill));
+  const [code, setCode] = useState(prefill?.code ?? "");
+  const [copy, setCopy] = useState<"idle" | "ok" | "blocked">("idle");
   const [focus, setFocus] = useState(true);
   const [phase, setPhase] = useState<Phase>("enter");
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +51,34 @@ export function VerifyForm({ name, next }: { name: string | null; next: string }
     void send(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Email link: drop the code from the address bar/history, then copy it (clipboard may be blocked without a tap).
+  useEffect(() => {
+    if (!prefill) return;
+    try {
+      const u = new URL(window.location.href);
+      for (const k of ["code", "email", "autocopy"]) u.searchParams.delete(k);
+      window.history.replaceState(null, "", `${u.pathname}${u.search}`);
+    } catch { /* ignore */ }
+    if (!prefill.autocopy) return;
+    let live = true;
+    void Promise.resolve()
+      .then(() => navigator.clipboard.writeText(prefill.code))
+      .then(() => { if (live) setCopy("ok"); })
+      .catch(() => { if (live) setCopy("blocked"); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (copy !== "ok") return;
+    const t = setTimeout(() => setCopy("idle"), 2600);
+    return () => clearTimeout(t);
+  }, [copy]);
+
+  async function copyNow() {
+    try { await navigator.clipboard.writeText(code); setCopy("ok"); } catch { setCopy("blocked"); }
+  }
 
   useEffect(() => {
     if (secs <= 0) return;
@@ -105,6 +137,7 @@ export function VerifyForm({ name, next }: { name: string | null; next: string }
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-[18px]" aria-busy={busy}>
       <h2 className="text-4xl font-normal leading-[1.04] tracking-[-0.035em]">Enter your code</h2>
+      {mismatch && <p role="alert" className="border-l-2 border-ink bg-white px-3 py-2 text-sm">That code was sent to a different Tidypin account, so we didn&apos;t fill it in.</p>}
       <div className="flex flex-col gap-2.5">
         <label htmlFor={id} className="text-xs text-ink-muted">6-digit code —</label>
         <div className="relative grid grid-cols-6 gap-2.5">
@@ -143,9 +176,15 @@ export function VerifyForm({ name, next }: { name: string | null; next: string }
         {note && <p role="status" className="text-sm text-ink-muted">{note}</p>}
       </div>
 
+      {prefill && copy === "blocked" && (
+        <button type="button" onClick={() => void copyNow()} className="flex h-14 cursor-pointer items-center justify-center gap-2.5 rounded-pill border-[1.5px] border-ink bg-lime text-[17px] font-medium text-ink hover:bg-lime-deep">
+          Copy code
+        </button>
+      )}
+
       <button type="submit" disabled={!full || busy || locked}
         className="flex h-14 cursor-pointer items-center justify-center gap-2.5 rounded-pill bg-ink text-[17px] font-medium text-white transition-colors hover:bg-ink-muted disabled:cursor-not-allowed disabled:bg-[#D9D9D5] disabled:text-[#8A8A8A]">
-        {busy ? (<><span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />Verifying…</>) : "Verify email"}
+        {busy ? (<><span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />Verifying…</>) : prefill ? "Verify now" : "Verify email"}
       </button>
 
       <div className="flex flex-wrap justify-between gap-2 text-sm text-ink-muted">
@@ -160,6 +199,10 @@ export function VerifyForm({ name, next }: { name: string | null; next: string }
         <button type="button" onClick={() => void changeEmail()} className="cursor-pointer bg-transparent p-0 text-ink underline">Change email</button>
       </div>
       <p className="text-xs text-[#6B6B6B]">Check spam if it’s not in your inbox.</p>
+      {/* Toast: always mounted so screen readers announce the change. */}
+      <div role="status" aria-live="polite" className={`pointer-events-none fixed inset-x-0 bottom-8 z-50 flex justify-center transition-opacity duration-200 ${copy === "ok" ? "opacity-100" : "opacity-0"}`}>
+        <span className="rounded-pill bg-ink px-5 py-3 text-sm font-medium text-white">{copy === "ok" ? "Code copied ✓" : ""}</span>
+      </div>
     </form>
   );
 }

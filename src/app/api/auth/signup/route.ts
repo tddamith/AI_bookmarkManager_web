@@ -66,7 +66,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "We couldn't create your account with those details. Check them and try again." }, { status: 422 });
   }
   if (upstream.status === 429) {
-    return NextResponse.json({ message: "Too many attempts. Wait a minute and try again." }, { status: 429 });
+    // The API says how long the lock lasts (login: up to 15 min, signup: up to an hour), so the form can count it down.
+    const d = (await upstream.clone().json().catch(() => null)) as { retryIn?: number } | null;
+    const retryIn = Math.min(Math.max(Math.ceil(Number(d?.retryIn)) || 60, 1), 86_400);
+    return NextResponse.json({ code: "rate_limited", retryIn, message: "Too many attempts." }, { status: 429, headers: { "Retry-After": String(retryIn) } });
   }
   if (!upstream.ok) {
     return NextResponse.json({ message: "Something went wrong on our side. Please try again." }, { status: 502 });

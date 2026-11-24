@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { FolderIcon } from "@/components/import/folder-icon";
 import { UploadBookmarks } from "@/components/import/upload-bookmarks";
-import { folderTones, nf, useSyncStatus } from "@/components/import/use-sync-status";
+import { folderTones, importLog, nf, useSyncStatus, type SyncStatus } from "@/components/import/use-sync-status";
 
 const steps = ["Imported all bookmarks", "Removed duplicates", "Putting them into folders", "Adding tags and summaries"];
 
@@ -31,15 +31,26 @@ function StepIcon({ state }: { state: "done" | "active" | "todo" }) {
   );
 }
 
+/** "Putting them into folders — 120 of 476": the stage being worked on and how far it has got. */
+function stageLine(data: SyncStatus | null, done: boolean) {
+  if (!data) return "";
+  if (done) return `${nf(data.total)} of ${nf(data.total)}`;
+  const label = data.source === "server" ? `${steps[data.stage]} — ` : "";
+  return `${label}${nf(data.processed)} of ${nf(data.total)}`;
+}
+
 export function ImportProgress() {
   const router = useRouter();
-  const { data, error } = useSyncStatus();
+  const { data, error, retry } = useSyncStatus();
   const done = data?.status === "done";
-  const waiting = !data || (data.status === "idle" && data.processed === 0);
+  const failed = data?.status === "error";
+  // "Waiting" = nothing to sort yet. Idle with bookmarks already in the library just means the pipeline is about to start.
+  const waiting = !data || (data.status === "idle" && data.library === 0 && data.processed === 0);
 
   // Everything finished in the side panel → move on to "All sorted".
   useEffect(() => {
     if (!done) return;
+    importLog("done → opening step 03 “All sorted” (/ready)");
     const t = setTimeout(() => router.push("/ready"), 1200);
     return () => clearTimeout(t);
   }, [done, router]);
@@ -55,13 +66,13 @@ export function ImportProgress() {
           You can close this tab, we’ll keep going
         </p>
         <h1 className="max-w-[520px] text-[clamp(40px,6vw,56px)] font-normal leading-[0.98] tracking-[-0.045em]">
-          {done ? "Sorted." : waiting ? "Waiting for your bookmarks…" : "Sorting your bookmarks…"}
+          {done ? "Sorted." : failed ? "Sorting stopped." : waiting ? "Waiting for your bookmarks…" : "Sorting your bookmarks…"}
         </h1>
       </div>
 
       <div className="flex flex-col gap-2" aria-live="polite">
         <div className="flex justify-between text-sm">
-          <span>{waiting ? "Open the Tidypin side panel and start the import" : `${nf(data?.processed ?? 0)} of ${nf(data?.total ?? 0)}`}</span>
+          <span>{waiting ? "Open the Tidypin side panel and start the import" : stageLine(data, done)}</span>
           <span>{percent}%</span>
         </div>
         <div className="h-2.5 overflow-hidden rounded-[5px] border border-ink" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label="Import progress">
@@ -71,7 +82,7 @@ export function ImportProgress() {
 
       <ul className="m-0 flex list-none flex-col border-b border-ink p-0">
         {steps.map((label, i) => {
-          const state = waiting ? "todo" : i < stage ? "done" : i === stage ? "active" : "todo";
+          const state = waiting ? "todo" : failed && i === stage ? "todo" : i < stage ? "done" : i === stage ? "active" : "todo";
           return (
             <li key={label} aria-current={state === "active" ? "step" : undefined}
               className={`flex h-14 items-center gap-3.5 border-t border-ink text-[17px] ${state === "active" ? "font-medium" : ""} ${state === "todo" ? "text-ink-muted" : ""}`}>
@@ -97,7 +108,21 @@ export function ImportProgress() {
         </section>
       )}
 
-      {!done && (waiting || (data?.status === "idle")) && <UploadBookmarks />}
+      {!done && !failed && (waiting || (data?.status === "idle")) && <UploadBookmarks />}
+
+      {!done && waiting && !error && (
+        <p className="text-sm text-ink-muted">
+          Nothing yet? Open the Tidypin side panel, make sure it is signed in with this same account, and choose “Bring my bookmarks”.
+          If you just updated the extension, reload it from the extensions page first.
+        </p>
+      )}
+
+      {failed && (
+        <div role="alert" className="flex flex-col gap-3 border-l-2 border-ink bg-white px-3 py-3 text-sm">
+          <p className="m-0">{data?.error ?? "Something went wrong while sorting your bookmarks."} Your bookmarks are safe.</p>
+          <button type="button" onClick={() => void retry()} className="h-10 w-fit cursor-pointer rounded-pill bg-ink px-5 text-sm font-medium text-white hover:bg-ink-muted">Retry</button>
+        </div>
+      )}
 
       {error && <p role="alert" className="border-l-2 border-ink bg-white px-3 py-2 text-sm">We lost connection. Retrying…</p>}
 

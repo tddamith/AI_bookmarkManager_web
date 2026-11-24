@@ -25,7 +25,7 @@ const options: { to: string; title: string; body: string; icon: ReactNode; tone:
     icon: <svg width="18" height="18" viewBox="0 0 24 24" stroke="#FFFFFF" {...stroke} aria-hidden="true"><path d="M6 3h9l3 3v15H6z" /><path d="M9 12h6M9 16h6" /></svg>,
   },
   {
-    to: links.app,
+    to: links.fresh,
     title: "Start fresh",
     body: "Begin with an empty library.",
     tone: "outline",
@@ -86,7 +86,7 @@ export function SkipButton() {
       className="cursor-pointer text-sm text-ink-soft hover:text-ink"
       onClick={async () => {
         await fetch("/api/onboarding/complete", { method: "POST" }).catch(() => undefined);
-        router.push(links.app);
+        router.push(links.fresh);
         router.refresh();
       }}
     >

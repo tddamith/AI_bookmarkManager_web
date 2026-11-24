@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   const p = new URL(req.url).searchParams;
   try {
     const src = await getSource(auth.ctx);
-    return json(listLibrary(src, { view: p.get("view") ?? undefined, folderId: p.get("folder") ?? undefined, q: (p.get("q") ?? "").slice(0, 200) }));
+    return json(listLibrary(src, { view: p.get("view") ?? undefined, folderId: p.get("folder") ?? undefined, q: (p.get("q") ?? "").slice(0, 200), site: p.get("site") ?? undefined, tag: p.get("tag") ?? undefined, folderName: p.get("folderName") ?? undefined, fav: p.get("fav") === "1", later: p.get("later") === "1" }));
   } catch {
     return json({ message: "We couldn't load your bookmarks." }, 502);
   }

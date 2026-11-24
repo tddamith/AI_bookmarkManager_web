@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -11,12 +12,27 @@ export const metadata: Metadata = {
   description: "Enter the 6-digit code we emailed you.",
   alternates: { canonical: "/verify" },
   robots: { index: false, follow: false },
+  referrer: "no-referrer", // the link in the email carries the code; never leak it in a Referer header
 };
 
-async function Content({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const { next } = await searchParams;
+type Params = { next?: string; code?: string; email?: string; autocopy?: string };
+
+/** Same short tag the email puts in the link (sha256 of the lower-cased address, first 16 hex chars). */
+const emailTag = (email: string) => createHash("sha256").update(email.trim().toLowerCase()).digest("hex").slice(0, 16);
+
+async function Content({ searchParams }: { searchParams: Promise<Params> }) {
+  const { next, code, email, autocopy } = await searchParams;
   const session = await getSession();
-  if (!session) redirect(`/signin?next=${encodeURIComponent(next ? `/verify?next=${next}` : "/verify")}`);
+  if (!session) {
+    // Keep the email link's parameters through sign-in so the code is still there afterwards.
+    const own = new URLSearchParams();
+    for (const [k, v] of Object.entries({ next, code, email, autocopy })) if (v) own.set(k, v);
+    redirect(`/signin?next=${encodeURIComponent(own.size ? `/verify?${own}` : "/verify")}`);
+  }
+  // Prefill only a well-formed code that was sent to THIS account.
+  const wellFormed = typeof code === "string" && /^\d{6}$/.test(code);
+  const mismatch = wellFormed && Boolean(email) && Boolean(session.email) && email !== emailTag(session.email!);
+  const prefill = wellFormed && !mismatch ? { code: code!, autocopy: autocopy === "1" } : null;
   // Explicit ?next wins; otherwise: no plan chosen yet → plan screen, else on to welcome.
   const dest = next ? safeNext(next) : afterVerifyPath(session);
   if (session.verified) redirect(dest); // already verified: nothing to do
@@ -52,14 +68,14 @@ async function Content({ searchParams }: { searchParams: Promise<{ next?: string
       </section>
       <main id="main" className="flex min-w-0 flex-[1_1_440px] justify-center px-6 py-16">
         <div className="w-full max-w-[440px]">
-          <VerifyForm name={session.name} next={dest} />
+          <VerifyForm name={session.name} next={dest} prefill={prefill} mismatch={mismatch} />
         </div>
       </main>
     </div>
   );
 }
 
-export default function VerifyPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+export default function VerifyPage({ searchParams }: { searchParams: Promise<Params> }) {
   return (
     <div className="flex min-h-screen flex-col bg-paper">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink px-6 py-4">

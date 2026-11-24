@@ -6,7 +6,9 @@ import Link from "next/link";
 import { ButtonLink } from "@/components/ui/button";
 import { BookmarkIcon } from "@/components/ui/icons";
 import { container, SectionHeading } from "@/components/ui/section-heading";
-import { links, pricing } from "@/lib/site";
+import { PayNote, ProPrice } from "@/components/plans/pro-price";
+import { formatPrice, PRICING } from "@/config/pricing";
+import { links } from "@/lib/site";
 
 export const faqs = [
   ["Is Tidypin really free?", "Yes. The Free plan keeps unlimited bookmarks forever. Pro adds unlimited AI, tidy-up and sync."],
@@ -30,13 +32,13 @@ export function Pricing() {
         <Reveal className="lift flex flex-col gap-4 rounded-card bg-white p-8">
           <div className="flex items-baseline justify-between">
             <h3 className="text-[26px] font-normal">Free —</h3>
-            <p className="text-[44px] tracking-[-0.03em]">$0</p>
+            <p className="text-[44px] tracking-[-0.03em]">{formatPrice(PRICING.free.price)}</p>
           </div>
           <ul className="m-0 flex list-none flex-col p-0 text-base">
             <Row>Unlimited bookmarks</Row>
-            <Row>{pricing.freeAiSuggestions} AI suggestions a month</Row>
+            <Row>{PRICING.free.aiSuggestionsPerMonth} AI suggestions a month</Row>
             <Row>Popup and side panel</Row>
-            <Row last>1 device</Row>
+            <Row last>{PRICING.free.devices} {PRICING.free.devices === 1 ? "device" : "devices"}</Row>
           </ul>
           <ButtonLink href={links.install} variant="secondary" size="lg" className="mt-auto">
             Add to browser — free
@@ -45,10 +47,7 @@ export function Pricing() {
         <Reveal index={1} className="lift flex flex-col gap-4 rounded-card border-[1.5px] border-ink bg-lime p-8">
           <div className="flex items-baseline justify-between">
             <h3 className="text-[26px] font-normal">Pro —</h3>
-            <p className="flex items-baseline gap-1.5">
-              <span className="text-[44px] tracking-[-0.03em]">{pricing.proPrice}</span>
-              <span className="text-sm text-ink-soft">/ month</span>
-            </p>
+            <ProPrice />
           </div>
           <ul className="m-0 flex list-none flex-col p-0 text-base">
             <Row>Unlimited AI suggestions and summaries</Row>
@@ -58,7 +57,7 @@ export function Pricing() {
           </ul>
           <ButtonLink href={links.signup} size="lg" className="mt-auto">Get Pro</ButtonLink>
           <p className="text-center text-[13px] text-ink-soft">
-            Save {pricing.yearlySavingPercent}% yearly · Pay securely with PayPal
+            <PayNote />
           </p>
         </Reveal>
       </div>

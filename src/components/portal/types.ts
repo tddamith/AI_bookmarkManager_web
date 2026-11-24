@@ -1,12 +1,16 @@
 export type Bookmark = {
   id: string; url: string; title: string; domain: string; folder: string; folderId: string | null;
-  savedAt: number; later: boolean; fav: boolean; tags: string[]; summary: string;
+  savedAt: number; later: boolean; fav: boolean; tags: string[]; summary: string; opens: number;
 };
 export type LibraryData = {
   bookmarks: Bookmark[];
   counts: { all: number; later: number; fav: number };
   folders: { id: string; name: string; count: number }[];
   fetchedAt: number;
+};
+export type SidebarData = {
+  counts: { all: number; later: number; fav: number };
+  folders: { id: string; name: string; count: number }[];
 };
 export type DashboardData = {
   range: "week" | "month";
@@ -22,7 +26,7 @@ export type DashboardData = {
   empty: boolean;
   filedLeft: number;
 };
-export type View = "dash" | "all" | "later" | "fav";
+export type View = "dash" | "all" | "later" | "fav" | "tidy";
 
 const palette = [
   { bg: "#111111", fg: "#D4FA1E" }, { bg: "#A6C3DD", fg: "#111111" }, { bg: "#C9B597", fg: "#111111" },

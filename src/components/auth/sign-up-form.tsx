@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 import { safeNext, validateSignUp, type SignUpField } from "@/lib/auth";
 import { fieldInput, fieldLabel, fieldWrap } from "@/components/auth/field-styles";
+import { RateLimitNotice } from "@/components/auth/rate-limit-notice";
+import { formatWait, useRateLimit } from "@/components/auth/use-rate-limit";
 import { links } from "@/lib/site";
 
 
@@ -15,10 +17,11 @@ export function SignUpForm({ unavailable = false }: { unavailable?: boolean }) {
     unavailable ? { message: "Google sign-up isn't available yet. Use your email and password." } : null,
   );
   const [loading, setLoading] = useState(false);
+  const limit = useRateLimit("tidypin.rateLimit.v2.signup");
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (loading) return;
+    if (loading || limit.locked) return;
     const form = new FormData(e.currentTarget);
     const payload = {
       name: String(form.get("name") ?? ""),
@@ -42,7 +45,13 @@ export function SignUpForm({ unavailable = false }: { unavailable?: boolean }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json().catch(() => ({}))) as { message?: string; field?: SignUpField; signedIn?: boolean };
+      const data = (await res.json().catch(() => ({}))) as { message?: string; field?: SignUpField; signedIn?: boolean; retryIn?: number };
+      if (res.status === 429 && data.retryIn) {
+        limit.lock(data.retryIn);
+        setError(null);
+        setLoading(false);
+        return;
+      }
       if (!res.ok) {
         setError({ message: data.message ?? "Something went wrong. Please try again.", field: data.field });
         setLoading(false);
@@ -90,7 +99,9 @@ export function SignUpForm({ unavailable = false }: { unavailable?: boolean }) {
         </span>
       </label>
 
-      {error && (
+      {limit.locked && <RateLimitNotice left={limit.left} id={`${id}-limit`} />}
+
+      {error && !limit.locked && (
         <p id={`${id}-error`} role="alert" className="border-l-2 border-ink bg-white px-3 py-2 text-sm text-ink">
           {error.message}
         </p>
@@ -98,7 +109,8 @@ export function SignUpForm({ unavailable = false }: { unavailable?: boolean }) {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || limit.locked}
+        aria-describedby={limit.locked ? `${id}-limit` : undefined}
         className="flex h-14 cursor-pointer items-center justify-center gap-2.5 rounded-pill bg-ink text-[17px] font-medium text-white transition-colors hover:bg-ink-muted disabled:cursor-not-allowed disabled:bg-disabled"
       >
         {loading ? (
@@ -106,6 +118,8 @@ export function SignUpForm({ unavailable = false }: { unavailable?: boolean }) {
             <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
             Creating account…
           </>
+        ) : limit.locked ? (
+          <span className="tabular-nums">Try again in {formatWait(limit.left)}</span>
         ) : (
           <>
             Create account

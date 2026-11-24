@@ -22,20 +22,15 @@ export const links = {
   install: "#", // browser extension store listing
   signin: "/signin",
   signup: "/signup",
+  forgot: "/forgot-password",
   plans: "/plans",
   welcome: "/welcome",
   app: "/dashboard", // signed-in home
+  fresh: "/dashboard?fresh=1", // "Start fresh": open the library empty on purpose
   checkout: "#", // PayPal checkout
   privacy: "#",
   terms: "#",
   contact: "#",
-} as const;
-
-/** Placeholders from the design — replace with real values before launch. */
-export const pricing = {
-  freeAiSuggestions: "[N]",
-  proPrice: "[PRICE]",
-  yearlySavingPercent: "[X]",
 } as const;
 
 export const absoluteUrl = (path = "/") => `${siteConfig.url}${path}`;

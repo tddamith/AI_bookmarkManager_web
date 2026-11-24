@@ -11,12 +11,13 @@ export const cors = {
 export const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { ...cors, "cache-control": "no-store" } });
 export const preflight = () => new NextResponse(null, { status: 204, headers: cors });
 
-import { getSession } from "@/lib/session";
+import { resolveSession } from "@/lib/session";
 
 /**
  * Shared guard for library routes. Returns the user id, or a ready 401 response.
  */
 export async function requireUser() {
-  const session = await getSession();
+  const session = await resolveSession();
+  if (session === "unavailable") return { error: json({ message: "The service is busy. Try again in a moment." }, 503) };
   return session ? { ctx: { userId: session.userId, token: session.token } } : { error: json({ message: "Please sign in." }, 401) };
 }

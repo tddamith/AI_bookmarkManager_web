@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Logo } from "@/components/landing/header-hero";
 import { SkipButton, WelcomeChoices } from "@/components/welcome/choices";
+import { hasBookmarks } from "@/lib/library";
 import { getSession } from "@/lib/session";
 import { links } from "@/lib/site";
 
@@ -19,7 +20,8 @@ async function Content() {
   const session = await getSession();
   if (!session) redirect(`/signin?next=${links.welcome}`);
   if (!session.verified) redirect("/verify");
-  if (session.onboarded) redirect(links.app); // shown once per user
+  // Shown on first visit, and again whenever the library is still empty. Done once there is something in it.
+  if (session.onboarded && (await hasBookmarks({ userId: session.userId, token: session.token }))) redirect(links.app);
   return (
     <>
       <div className="flex flex-col gap-3">

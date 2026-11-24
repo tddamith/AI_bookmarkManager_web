@@ -1,21 +1,37 @@
 "use client";
 
 import { SparkIcon } from "@/components/ui/icons";
+import { EmptyState } from "@/components/portal/empty-state";
 import type { DashboardData } from "@/components/portal/types";
+import { links } from "@/lib/site";
 
 const card = "flex min-w-0 flex-col gap-3 rounded-[22px] p-5";
 
-export function DashboardView({ data, onRange, onTip, onOpen, onAdd }: {
+export function DashboardView({ data, onRange, onTip, onOpen }: {
   data: DashboardData | null;
   onRange: (r: "week" | "month") => void;
   onTip: (to: { view?: string; open?: string }) => void;
   onOpen: (id: string) => void;
-  onAdd: () => void;
 }) {
   const range = data?.range ?? "week";
   const seg = (on: boolean) => `h-[30px] cursor-pointer rounded-full px-3.5 text-xs ${on ? "bg-ink text-white" : "text-ink"}`;
   const max = Math.max(1, ...(data?.days.map((d) => d.n) ?? [1]));
   const imax = Math.max(1, data?.interests[0]?.pct ?? 1);
+
+  if (data?.empty) {
+    return (
+      <div className="flex grow flex-col gap-5">
+        <div>
+          <h1 className="text-[44px] font-normal leading-[1.02] tracking-[-0.035em]">Library</h1>
+          <p className="mt-1 text-[13px] text-ink-muted">No bookmarks yet</p>
+        </div>
+        <EmptyState kind="library" kicker="Library" title="Your library is empty."
+          body="Bring in the bookmarks you already have and Tidypin will sort them into folders for you. Or save your first page from the extension."
+          primary={{ label: "Import bookmarks", href: "/import" }} secondary={{ label: "Get the extension", href: links.install }}
+          footnote="Tip — press Alt + S on any page to save it. It shows up here in seconds." />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -32,15 +48,6 @@ export function DashboardView({ data, onRange, onTip, onOpen, onAdd }: {
 
       {!data ? (
         <p className="py-10 text-sm text-ink-muted" role="status">Loading your dashboard…</p>
-      ) : data.empty ? (
-        <div className={`${card} items-start bg-white`}>
-          <h2 className="text-2xl font-normal tracking-[-0.02em]">Your library is empty</h2>
-          <p className="max-w-[420px] text-[15px] text-ink-muted">Add your first bookmark, or bring in the ones you already have. Your stats will build up here.</p>
-          <div className="flex flex-wrap gap-3">
-            <button type="button" onClick={onAdd} className="h-11 cursor-pointer rounded-full bg-ink px-5 text-[15px] font-medium text-white hover:bg-ink-muted">+ Add bookmark</button>
-            <a href="/import" className="inline-flex h-11 items-center rounded-full border-[1.5px] border-ink px-5 text-[15px] no-underline hover:bg-paper">Import bookmarks</a>
-          </div>
-        </div>
       ) : (
         <>
           <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] border-y border-ink">

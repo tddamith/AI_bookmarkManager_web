@@ -3,14 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowRight, CheckCircle } from "@/components/ui/icons";
-import { links, pricing } from "@/lib/site";
+import { ProPrice, useSavingPercent } from "@/components/plans/pro-price";
+import { PRICING, formatPrice } from "@/config/pricing";
+import { links } from "@/lib/site";
 
 const freeFeatures = [
   "Unlimited bookmarks",
-  `${pricing.freeAiSuggestions} AI suggestions a month`,
+  `${PRICING.free.aiSuggestionsPerMonth} AI suggestions a month`,
   "Popup, side panel and web portal",
-  "1 device",
+  `${PRICING.free.devices} ${PRICING.free.devices === 1 ? "device" : "devices"}`,
 ];
+const hasMonthly = PRICING.pro.monthlyPrice != null;
 const proFeatures = [
   "Unlimited AI suggestions and summaries",
   "One-tap tidy-up",
@@ -22,7 +25,9 @@ const row = "flex h-[46px] items-center gap-3 border-t border-ink text-base";
 
 export function PlanPicker() {
   const router = useRouter();
-  const [yearly, setYearly] = useState(true);
+  const [yearlyChoice, setYearly] = useState(true);
+  const yearly = yearlyChoice || !hasMonthly;   // yearly-only plan: there is nothing else to choose
+  const saving = useSavingPercent();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +71,7 @@ export function PlanPicker() {
             Choose a plan
           </h1>
         </div>
+        {hasMonthly && (
         <div role="group" aria-label="Billing period" className="flex rounded-pill border-[1.5px] border-ink p-[3px]">
           <button type="button" aria-pressed={!yearly} onClick={() => setYearly(false)}
             className={`${tab} ${!yearly ? "bg-ink font-medium text-white" : "text-ink"}`}>
@@ -73,16 +79,17 @@ export function PlanPicker() {
           </button>
           <button type="button" aria-pressed={yearly} onClick={() => setYearly(true)}
             className={`${tab} ${yearly ? "bg-ink font-medium text-white" : "text-ink"}`}>
-            Yearly · save {pricing.yearlySavingPercent}%
+            Yearly{saving ? ` · save ${saving}%` : ""}
           </button>
         </div>
+        )}
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5">
         <section aria-labelledby="plan-free" className="flex flex-col gap-4 rounded-card bg-white p-8">
           <div className="flex items-baseline justify-between">
             <h2 id="plan-free" className="text-[28px] font-normal">Free —</h2>
-            <p className="text-[44px] tracking-[-0.03em]">$0</p>
+            <p className="text-[44px] tracking-[-0.03em]">{formatPrice(PRICING.free.price)}</p>
           </div>
           <ul className="m-0 flex list-none flex-col border-b border-ink p-0">
             {freeFeatures.map((f) => <li key={f} className={row}>{f}</li>)}
@@ -96,10 +103,7 @@ export function PlanPicker() {
         <section aria-labelledby="plan-pro" className="flex flex-col gap-4 rounded-card border-[1.5px] border-ink bg-lime p-8">
           <div className="flex items-baseline justify-between">
             <h2 id="plan-pro" className="text-[28px] font-normal">Pro —</h2>
-            <p className="flex items-baseline gap-1.5">
-              <span className="text-[44px] tracking-[-0.03em]">{pricing.proPrice}</span>
-              <span className="text-sm text-ink-soft">/ {yearly ? "year" : "month"}</span>
-            </p>
+            <ProPrice period={yearly ? "year" : "month"} />
           </div>
           <ul className="m-0 flex list-none flex-col border-b border-ink p-0">
             {proFeatures.map((f) => (

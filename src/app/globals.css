@@ -40,6 +40,14 @@ body {
   box-shadow: 0 0 0 3px var(--color-paper), 0 0 0 5px var(--color-ink);
 }
 
+/* Fields that draw their own focus state on a wrapper (e.g. the search pill) must not get the global ring on the inner input.
+   Unlayered rule on purpose: it has to win over the unlayered :focus-visible above. */
+.tp-bare-focus:focus,
+.tp-bare-focus:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -99,3 +107,23 @@ header {
   overflow-x: clip;
 }
 
+
+
+/* ---------- Sidebar skeleton shimmer ---------- */
+@keyframes tp-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.tp-shimmer {
+  background: linear-gradient(90deg, #ecebe6 0%, #f5f4f0 50%, #ecebe6 100%);
+  background-size: 200% 100%;
+  animation: tp-shimmer 1.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tp-shimmer { animation: none; }
+}
+
+/* Thin scrollbar for the sidebar folder list */
+.tp-thin-scroll { scrollbar-width: thin; scrollbar-color: #11111140 transparent; }
+.tp-thin-scroll::-webkit-scrollbar { width: 6px; }
+.tp-thin-scroll::-webkit-scrollbar-thumb { background: #11111140; border-radius: 3px; }

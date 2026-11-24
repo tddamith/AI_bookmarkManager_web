@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { applyFilters, rank, type Doc, type Filter } from "@/lib/search";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -21,12 +22,18 @@ export type Mark = {
   moved?: boolean;
 };
 export type ImportState = {
-  status: "idle" | "importing" | "done";
+  status: "idle" | "importing" | "done" | "error";
   total: number;
   /** 0 imported · 1 duplicates · 2 folders · 3 tags & summaries */
   stage: 0 | 1 | 2 | 3;
   duplicates: number;
   dead: number;
+  /** Progress of the stage being worked on (server pipeline) */
+  done?: number;
+  /** Who is driving the import: the browser extension, or this app's own pipeline (import-pipeline.ts). */
+  source?: "extension" | "server";
+  error?: string;
+  updatedAt?: number;
 };
 type Lib = { folders: Record<string, Folder>; marks: Record<string, Mark>; import: ImportState; opens?: { t: number; m: string }[] };
 type Db = Record<string, Lib>;
@@ -89,30 +96,42 @@ export function syncLibrary(userId: string, input: SyncInput) {
       if (typeof imp.total === "number") lib.import.total = imp.total;
       if (typeof imp.dead === "number") lib.import.dead = imp.dead;
       if (typeof imp.stage === "number") lib.import.stage = Math.min(3, Math.max(0, Math.floor(imp.stage))) as ImportState["stage"];
-      if (imp.status === "importing" || imp.status === "done" || imp.status === "idle") lib.import.status = imp.status;
+      if (imp.status === "importing" || imp.status === "done" || imp.status === "idle" || imp.status === "error") lib.import.status = imp.status;
+      lib.import.source = "extension";   // this path is the extension / file upload; the server pipeline writes through setImportState()
     }
     if (lib.import.status === "idle" && imp?.status !== "idle") lib.import.status = "importing"; // any sync starts the import
     if (lib.import.status === "done") lib.import.stage = 3;
+    lib.import.updatedAt = Date.now();
     await save(db);
   });
 }
 
 export function summaryFrom(src: Pick<Source, "marks" | "folders">, imp: ImportState) {
   const marks = src.marks;
-  const processed = marks.length;
-  const total = Math.max(imp.total, processed);
+  const library = marks.length;
+  const server = imp.source === "server";
+  // Extension imports: progress = bookmarks that have arrived. Server pipeline: progress of the current stage (done / total).
+  const processed = server ? imp.done ?? 0 : library;
+  const total = server ? imp.total : Math.max(imp.total, processed);
   const counts = new Map<string, number>();
   for (const m of marks) if (m.folderId) counts.set(m.folderId, (counts.get(m.folderId) ?? 0) + 1);
   const folders = Object.values(src.folders)
     .map((f) => ({ ...f, count: counts.get(f.id) ?? 0 }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const percent = imp.status === "done" ? 100
+    : server ? Math.min(99, Math.round(((imp.stage + (total ? Math.min(1, processed / total) : 0)) / 4) * 100))
+    : total ? Math.min(100, Math.round((processed / total) * 100)) : 0;
   return {
     status: imp.status,
     stage: imp.stage,
     processed,
     total,
-    percent: imp.status === "done" ? 100 : total ? Math.min(100, Math.round((processed / total) * 100)) : 0,
-    stats: { bookmarks: processed, folders: folders.length, duplicates: imp.duplicates, dead: imp.dead },
+    percent,
+    source: imp.source ?? "extension",
+    error: imp.status === "error" ? imp.error ?? "Something went wrong while sorting your bookmarks." : null,
+    ageSec: imp.updatedAt ? Math.max(0, Math.round((Date.now() - imp.updatedAt) / 1000)) : null,
+    library,
+    stats: { bookmarks: library, folders: folders.length, duplicates: imp.duplicates, dead: imp.dead },
     folders,
   };
 }
@@ -168,12 +187,21 @@ export function setImportState(userId: string, patch: Partial<ImportState>) {
   return locked(async () => {
     const db = await load();
     const lib = await libOf(db, userId);
-    lib.import = { ...lib.import, ...patch };
+    lib.import = { ...lib.import, ...patch, updatedAt: Date.now() };
+    if (patch.status !== "error") delete lib.import.error;
     await save(db);
   });
 }
 
-export function listLibrary(src: Source, opts: { view?: string; folderId?: string; q?: string }) {
+/** Search documents (with AI summaries) for every bookmark in the account. */
+export function searchDocs(src: Source): Doc[] {
+  return src.marks.map(norm).map((m) => ({
+    id: m.id, title: m.title, domain: domainOf(m.url), folder: m.folderId ? src.folders[m.folderId]?.name ?? OTHER : OTHER,
+    tags: m.tags, summary: m.summary, fav: m.fav, later: m.later,
+  }));
+}
+
+export function listLibrary(src: Source, opts: { view?: string; folderId?: string; q?: string; site?: string; tag?: string; folderName?: string; fav?: boolean; later?: boolean }) {
   const lib = src;
   const all = src.marks.map(norm);
   const counts = new Map<string, number>();
@@ -182,14 +210,40 @@ export function listLibrary(src: Source, opts: { view?: string; folderId?: strin
   if (opts.folderId) list = list.filter((m) => m.folderId === opts.folderId);
   else if (opts.view === "later") list = list.filter((m) => m.later);
   else if (opts.view === "fav") list = list.filter((m) => m.fav);
-  const q = opts.q?.trim().toLowerCase();
-  if (q) list = list.filter((m) => `${m.title} ${domainOf(m.url)} ${m.tags.join(" ")}`.toLowerCase().includes(q));
-  list = [...list].sort((a, b) => b.savedAt - a.savedAt).slice(0, 300);
+  const filters: Filter[] = [];
+  if (opts.site) filters.push({ k: "site", v: opts.site });
+  if (opts.tag) filters.push({ k: "tag", v: opts.tag });
+  if (opts.folderName) filters.push({ k: "folder", v: opts.folderName });
+  if (opts.fav) filters.push({ k: "is", v: "favorite" });
+  if (opts.later) filters.push({ k: "is", v: "readlater" });
+  const q = opts.q?.trim();
+  if (q || filters.length) {
+    const docs = new Map(searchDocs({ ...src, marks: list }).map((d) => [d.id, d]));
+    const ok = new Set(rank(applyFilters([...docs.values()], filters), q ?? "").map((d) => d.id));
+    const order = new Map([...ok].map((id, i) => [id, i]));
+    list = list.filter((m) => ok.has(m.id));
+    // Searching: best match first. Otherwise: newest first.
+    list = q ? [...list].sort((a, b) => order.get(a.id)! - order.get(b.id)!) : [...list].sort((a, b) => b.savedAt - a.savedAt);
+  } else list = [...list].sort((a, b) => b.savedAt - a.savedAt);
+  list = list.slice(0, 300);
   const fname = (id: string | null) => (id ? lib.folders[id]?.name ?? OTHER : OTHER);
+  const opened = new Map<string, number>();
+  for (const o of lib.opens) opened.set(o.m, (opened.get(o.m) ?? 0) + 1);
   return {
-    bookmarks: list.map((m) => ({ ...m, domain: domainOf(m.url), folder: fname(m.folderId) })),
+    bookmarks: list.map((m) => ({ ...m, domain: domainOf(m.url), folder: fname(m.folderId), opens: opened.get(m.id) ?? 0 })),
     counts: { all: all.length, later: all.filter((m) => m.later).length, fav: all.filter((m) => m.fav).length },
     folders: Object.values(lib.folders).map((f) => ({ ...f, count: counts.get(f.id) ?? 0 })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+  };
+}
+
+/** Sidebar data only: counts and folders (highest count first), without the bookmark rows. */
+export function sidebarData(src: Source) {
+  const all = src.marks.map(norm);
+  const counts = new Map<string, number>();
+  for (const m of all) if (m.folderId) counts.set(m.folderId, (counts.get(m.folderId) ?? 0) + 1);
+  return {
+    counts: { all: all.length, later: all.filter((m) => m.later).length, fav: all.filter((m) => m.fav).length },
+    folders: Object.values(src.folders).map((f) => ({ ...f, count: counts.get(f.id) ?? 0 })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
   };
 }
 
@@ -203,7 +257,7 @@ function resolveFolder(lib: Lib, folderName?: string | null): string | null {
   return id;
 }
 
-export type MarkPatch = { title?: string; folderName?: string | null; later?: boolean; fav?: boolean; tags?: string[] };
+export type MarkPatch = { title?: string; folderName?: string | null; later?: boolean; fav?: boolean; tags?: string[]; summary?: string };
 
 export function addMark(userId: string, input: { url: string; title?: string; folderName?: string | null }) {
   return locked(async () => {
@@ -229,6 +283,7 @@ export function updateMark(userId: string, id: string, patch: MarkPatch) {
     if (typeof patch.later === "boolean") m.later = patch.later;
     if (typeof patch.fav === "boolean") m.fav = patch.fav;
     if (Array.isArray(patch.tags)) m.tags = patch.tags.slice(0, 10).map((t) => t.slice(0, 30));
+    if (typeof patch.summary === "string") m.summary = patch.summary.slice(0, 1500);
     if (patch.folderName !== undefined) {
       const next = resolveFolder(lib, patch.folderName);
       if (next !== m.folderId) m.moved = true;
