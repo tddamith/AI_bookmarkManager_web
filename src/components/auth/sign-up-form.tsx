@@ -10,11 +10,11 @@ import { formatWait, useRateLimit } from "@/components/auth/use-rate-limit";
 import { links } from "@/lib/site";
 
 
-export function SignUpForm({ unavailable = false }: { unavailable?: boolean }) {
+export function SignUpForm({ initialError = null }: { initialError?: string | null }) {
   const router = useRouter();
   const id = useId();
   const [error, setError] = useState<{ field?: SignUpField; message: string } | null>(
-    unavailable ? { message: "Google sign-up isn't available yet. Use your email and password." } : null,
+    initialError ? { message: initialError } : null,
   );
   const [loading, setLoading] = useState(false);
   const limit = useRateLimit("tidypin.rateLimit.v2.signup");

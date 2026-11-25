@@ -20,7 +20,8 @@ export async function POST() {
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
-    const data = (await res.json().catch(() => ({}))) as { error?: string; retryIn?: number };
+    const data = (await res.json().catch(() => ({}))) as { error?: string; retryIn?: number; verified?: boolean };
+    if (res.ok && data.verified) return NextResponse.json({ ok: true, verified: true });
     if (res.ok) return NextResponse.json({ ok: true, retryIn: 45 });
     if (data.error === "rate_limited") return NextResponse.json({ ok: false, rateLimited: true, retryIn: Math.max(1, Math.ceil(data.retryIn ?? 45)) }, { status: 429 });
     if (data.error === "already_verified") return NextResponse.json({ ok: true, verified: true });

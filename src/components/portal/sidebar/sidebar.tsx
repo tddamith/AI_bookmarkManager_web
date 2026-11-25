@@ -11,7 +11,7 @@ import { SparkIcon } from "@/components/ui/icons";
 const ROW = "relative flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-full border-0 px-2.5 text-left text-sm";
 const tone = (on: boolean) => (on ? "text-white" : "bg-transparent text-ink hover:bg-white");
 
-export function PortalSidebar({ initial, initialExpanded, enter, tick, isDash, view, folderId, loadingFolderId, filedLeft, onGo }: {
+export function PortalSidebar({ initial, initialExpanded, enter, tick, isDash, view, folderId, loadingFolderId, filedLeft, tidyLocked = false, onGo }: {
   initial: SidebarData | null;
   initialExpanded: boolean;
   enter: boolean;
@@ -21,6 +21,8 @@ export function PortalSidebar({ initial, initialExpanded, enter, tick, isDash, v
   folderId: string | null;
   loadingFolderId: string | null;
   filedLeft: number;
+  /** Free plan: the tidy-up button leads to the plans page instead. */
+  tidyLocked?: boolean;
   onGo: (view: View, folder?: string | null) => void;
 }) {
   const { data, status, retry } = useSidebarFolders(initial, tick);
@@ -69,8 +71,9 @@ export function PortalSidebar({ initial, initialExpanded, enter, tick, isDash, v
             <defs><pattern id="tp-stack" width="120" height="120" patternUnits="userSpaceOnUse"><path d="M12 12H100V100M12 32H80V100M12 52H60V100M76 12L108 44" fill="none" stroke="#111" strokeWidth="1" strokeLinecap="square" /></pattern></defs>
             <rect width="100%" height="100%" fill="url(#tp-stack)" />
           </svg>
-          <button type="button" onClick={() => onGo("tidy")} className="flex shrink-0 cursor-pointer items-center gap-2 rounded-[18px] border-0 bg-lime px-3.5 py-3 text-left text-[13px] hover:bg-lime-deep">
-            <SparkIcon size={14} /><span className="grow">AI tidy-up</span>{filedLeft > 0 && <span>{filedLeft} →</span>}
+          <button type="button" onClick={() => onGo("tidy")} aria-label={tidyLocked ? "AI tidy-up — Pro feature, see plans" : undefined} className="flex shrink-0 cursor-pointer items-center gap-2 rounded-[18px] border-0 bg-lime px-3.5 py-3 text-left text-[13px] hover:bg-lime-deep">
+            <SparkIcon size={14} /><span className="grow">AI tidy-up</span>
+            {tidyLocked ? <span className="rounded-pill bg-ink px-2 py-0.5 text-[11px] text-white">Pro</span> : filedLeft > 0 && <span>{filedLeft} →</span>}
           </button>
         </nav>
       </LayoutGroup>

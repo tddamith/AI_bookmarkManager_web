@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { Logo } from "@/components/landing/header-hero";
 import { DecideLater } from "@/components/plans/decide-later";
 import { PlanPicker } from "@/components/plans/plan-picker";
+import { getCatalog, getOverview } from "@/lib/billing";
 import { getSession } from "@/lib/session";
 import { links } from "@/lib/site";
 
@@ -18,7 +19,8 @@ async function Gate() {
   const session = await getSession();
   if (!session) redirect(`/signin?next=${links.plans}`);
   if (!session.verified) redirect("/verify");
-  return <PlanPicker />;
+  const [catalog, overview] = await Promise.all([getCatalog(), getOverview(session.token).catch(() => null)]);
+  return <PlanPicker catalog={catalog} current={overview?.subscription ?? null} />;
 }
 
 export default function PlansPage() {

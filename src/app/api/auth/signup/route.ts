@@ -1,36 +1,52 @@
 import { NextResponse } from "next/server";
 import { issueToken, registerUser } from "@/lib/auth-store";
-import { authApiUrl, isSecureRequest, SESSION_COOKIE, THIRTY_DAYS, validateSignUp } from "@/lib/auth";
+import {
+  authApiUrl,
+  isSecureRequest,
+  SESSION_COOKIE,
+  THIRTY_DAYS,
+  validateSignUp,
+} from "@/lib/auth";
+import {
+  backendFetch,
+  jsonError,
+  readJson,
+  setSessionCookie,
+  unreachable,
+} from "@/lib/backend";
 
 /**
  * POST /api/auth/signup  { name, email, password, terms }
  * Proxies to `${AUTH_API_URL}/auth/signup` and signs the new user in with an httpOnly cookie.
  *
- * Expected backend contract (adjust below if yours differs):
- *   POST /auth/signup  { name, email, password }  →  200 { token, user: {id,name,email,verified}, pro, ... }
- *                                                |  409 { error: "exists" } | 400 { error: "bad_email" | "bad_password" }
+ * Backend: POST /auth/signup { name, email, password } → 200 { token, user: {id,name,email,verified}, pro, ... }
+ *                                                      | 409 { error: "exists" } | 400 { error: "bad_email" | "bad_password" }
  */
 export async function POST(request: Request) {
-  if (!request.headers.get("content-type")?.includes("application/json")) {
-    return NextResponse.json({ message: "Unsupported request." }, { status: 415 });
-  }
-
-  let body: { name?: unknown; email?: unknown; password?: unknown; terms?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ message: "Invalid request." }, { status: 400 });
-  }
+  const body = await readJson<{
+    name: unknown;
+    email: unknown;
+    password: unknown;
+    terms: unknown;
+  }>(request);
+  if (!body) return jsonError("Invalid request.", 400);
 
   const invalid = validateSignUp(body);
   if (invalid) return NextResponse.json(invalid, { status: 422 });
 
-  const base = authApiUrl();
-  if (!base) {
-    // Built-in backend (no AUTH_API_URL configured)
-    const result = await registerUser({ name: String(body.name), email: String(body.email), password: String(body.password) });
+  if (!authApiUrl()) {
+    // Built-in backend (no AUTH_API_URL configured — development only)
+    const result = await registerUser({
+      name: String(body.name),
+      email: String(body.email),
+      password: String(body.password),
+    });
     if (!result.ok) {
-      return NextResponse.json({ field: "email", message: "An account with this email already exists. Try signing in." }, { status: 409 });
+      return jsonError(
+        "An account with this email already exists. Try signing in.",
+        409,
+        { field: "email" },
+      );
     }
     const res = NextResponse.json({ ok: true, signedIn: true });
     res.cookies.set(SESSION_COOKIE, issueToken(result.id, THIRTY_DAYS), {
@@ -43,51 +59,71 @@ export async function POST(request: Request) {
     return res;
   }
 
-  let upstream: Response;
+  let upstream;
   try {
-    upstream = await fetch(`${base}/auth/signup`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ name: String(body.name).trim(), email: String(body.email).trim(), password: body.password }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+    upstream = await backendFetch<{ token?: string }>("/auth/signup", {
+      request,
+      body: {
+        name: String(body.name).trim(),
+        email: String(body.email).trim(),
+        password: body.password,
+      },
     });
   } catch {
-    return NextResponse.json({ message: "We couldn't reach the server. Check your connection and try again." }, { status: 502 });
+    return unreachable();
   }
 
-  const err = upstream.ok ? null : ((await upstream.clone().json().catch(() => null)) as { error?: string } | null)?.error;
-  if (err === "bad_email") return NextResponse.json({ field: "email", message: "Enter a valid email address." }, { status: 422 });
-  if (err === "bad_password") return NextResponse.json({ field: "password", message: "Choose a stronger password (at least 8 characters)." }, { status: 422 });
+  const err = upstream.ok ? null : upstream.data.error;
+  if (err === "bad_email")
+    return jsonError("Enter a valid email address.", 422, { field: "email" });
+  if (err === "bad_password")
+    return jsonError("Choose a stronger password (8–200 characters).", 422, {
+      field: "password",
+    });
+  if (err === "bad_name")
+    return jsonError("Enter your name.", 422, { field: "name" });
   if (upstream.status === 409) {
-    return NextResponse.json({ field: "email", message: "An account with this email already exists. Try signing in." }, { status: 409 });
+    return NextResponse.json(
+      {
+        field: "email",
+        message: "An account with this email already exists. Try signing in.",
+      },
+      { status: 409 },
+    );
   }
   if (upstream.status === 400 || upstream.status === 422) {
-    return NextResponse.json({ message: "We couldn't create your account with those details. Check them and try again." }, { status: 422 });
+    return NextResponse.json(
+      {
+        message:
+          "We couldn't create your account with those details. Check them and try again.",
+      },
+      { status: 422 },
+    );
   }
   if (upstream.status === 429) {
     // The API says how long the lock lasts (login: up to 15 min, signup: up to an hour), so the form can count it down.
-    const d = (await upstream.clone().json().catch(() => null)) as { retryIn?: number } | null;
-    const retryIn = Math.min(Math.max(Math.ceil(Number(d?.retryIn)) || 60, 1), 86_400);
-    return NextResponse.json({ code: "rate_limited", retryIn, message: "Too many attempts." }, { status: 429, headers: { "Retry-After": String(retryIn) } });
+    const d = upstream.data as { retryIn?: number };
+    const retryIn = Math.min(
+      Math.max(Math.ceil(Number(d?.retryIn)) || 60, 1),
+      86_400,
+    );
+    return NextResponse.json(
+      { code: "rate_limited", retryIn, message: "Too many attempts." },
+      { status: 429, headers: { "Retry-After": String(retryIn) } },
+    );
   }
   if (!upstream.ok) {
-    return NextResponse.json({ message: "Something went wrong on our side. Please try again." }, { status: 502 });
+    return NextResponse.json(
+      { message: "Something went wrong on our side. Please try again." },
+      { status: 502 },
+    );
   }
 
-  const data = (await upstream.json().catch(() => null)) as { token?: string; expiresIn?: number } | null;
-  if (!data?.token) {
-    // Account created but no session returned: send them to sign in.
+  // Account created but no session returned: send them to sign in.
+  if (!upstream.data.token)
     return NextResponse.json({ ok: true, signedIn: false });
-  }
 
   const res = NextResponse.json({ ok: true, signedIn: true });
-  res.cookies.set(SESSION_COOKIE, data.token, {
-    httpOnly: true,
-    secure: isSecureRequest(request),
-    sameSite: "lax",
-    path: "/",
-    maxAge: Math.min(data.expiresIn ?? THIRTY_DAYS, THIRTY_DAYS),
-  });
+  setSessionCookie(res, request, upstream.data.token, true);
   return res;
 }

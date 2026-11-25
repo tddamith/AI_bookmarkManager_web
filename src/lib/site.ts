@@ -4,7 +4,10 @@ export const siteConfig = {
   tagline: "Bookmarks that organize themselves.",
   description:
     "Tidypin is an AI bookmark manager for Chrome, Edge and Brave. Save any page in one click, and AI picks the folder, writes a summary and cleans up duplicates and dead links.",
-  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, ""),
+  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(
+    /\/$/,
+    "",
+  ),
   locale: "en_US",
   twitter: "@tidypin",
   keywords: [
@@ -27,7 +30,8 @@ export const links = {
   welcome: "/welcome",
   app: "/dashboard", // signed-in home
   fresh: "/dashboard?fresh=1", // "Start fresh": open the library empty on purpose
-  checkout: "#", // PayPal checkout
+  billing: "/account/billing", // plan, subscription, usage, payments
+  checkout: "/plans", // PayPal checkout starts from the plan picker
   privacy: "#",
   terms: "#",
   contact: "#",

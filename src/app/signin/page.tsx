@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { safeNext } from "@/lib/auth";
+import { authErrorMessage, safeNext } from "@/lib/auth";
 import { getSession } from "@/lib/session";
+import { GoogleAuth, OrDivider } from "@/components/auth/google-button";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { Logo } from "@/components/landing/header-hero";
 import { links } from "@/lib/site";
@@ -19,7 +20,13 @@ async function Form({ searchParams }: { searchParams: Promise<{ error?: string; 
   const { error, next } = await searchParams;
   // Already signed in (e.g. "Keep me signed in" from a previous visit): skip the form.
   if (await getSession()) redirect(safeNext(next ?? null));
-  return <SignInForm unavailable={error === "unavailable"} />;
+  return (
+    <>
+      <GoogleAuth from="signin" next={next} label="Continue with Google" />
+      <OrDivider />
+      <SignInForm initialError={authErrorMessage(error)} />
+    </>
+  );
 }
 
 export default function SignInPage({ searchParams }: { searchParams: Promise<{ error?: string; next?: string }> }) {
@@ -61,15 +68,6 @@ export default function SignInPage({ searchParams }: { searchParams: Promise<{ e
         <main id="main" className="flex min-w-0 flex-[1_1_440px] justify-center px-6 py-16">
           <div className="flex w-full max-w-[440px] flex-col gap-[18px]">
             <h2 className="text-4xl font-normal leading-[1.04] tracking-[-0.035em]">Sign in to Tidypin</h2>
-            <a
-              href="/api/auth/google"
-              className="flex h-[52px] items-center justify-center rounded-pill border-[1.5px] border-ink text-base no-underline hover:bg-white"
-            >
-              Continue with Google
-            </a>
-            <div className="flex items-center gap-3 text-xs text-ink-muted" aria-hidden="true">
-              <span className="h-px grow bg-ink" />or<span className="h-px grow bg-ink" />
-            </div>
             <Suspense fallback={<SignInFormFallback />}>
               <Form searchParams={searchParams} />
             </Suspense>
@@ -85,5 +83,5 @@ export default function SignInPage({ searchParams }: { searchParams: Promise<{ e
 }
 
 function SignInFormFallback() {
-  return <div className="h-[330px]" aria-hidden="true" />;
+  return <div className="h-[436px]" aria-hidden="true" />;
 }

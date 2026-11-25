@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { authApiUrl, SESSION_COOKIE } from "@/lib/auth";
 
 /** Revokes the token on the backend (so it stops working everywhere), then clears the cookie. */
@@ -15,7 +15,7 @@ export async function POST() {
         cache: "no-store",
         signal: AbortSignal.timeout(8000),
       });
-      revoked = r.ok || r.status === 401;     // 401 = already invalid, fine
+      revoked = r.ok || r.status === 401; // 401 = already invalid, fine
     } catch {
       revoked = false;
     }

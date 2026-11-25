@@ -18,6 +18,7 @@ import { PortalSidebar } from "@/components/portal/sidebar/sidebar";
 import { SearchBar } from "@/components/portal/search/search-bar";
 import { libraryKey, load, peekAt } from "@/lib/portal-cache";
 import type { Filter } from "@/lib/search";
+import { links } from "@/lib/site";
 
 async function api<T>(path: string): Promise<T | null> {
   try {
@@ -32,7 +33,7 @@ async function api<T>(path: string): Promise<T | null> {
   }
 }
 
-export function PortalApp({ name, fresh = false, sidebar = null, foldersOpen = false, enter = false }: { name: string | null; fresh?: boolean; sidebar?: SidebarData | null; foldersOpen?: boolean; enter?: boolean }) {
+export function PortalApp({ name, pro = false, fresh = false, sidebar = null, foldersOpen = false, enter = false }: { name: string | null; pro?: boolean; fresh?: boolean; sidebar?: SidebarData | null; foldersOpen?: boolean; enter?: boolean }) {
   const router = useRouter();
   const [view, setView] = useState<View>("dash");
   const [folderId, setFolderId] = useState<string | null>(null);
@@ -84,6 +85,7 @@ export function PortalApp({ name, fresh = false, sidebar = null, foldersOpen = f
   const heading = folderId ? (lib?.folders.find((f) => f.id === folderId)?.name ?? "Folder") : searchActive ? "Search" : view === "later" ? "Read later" : view === "fav" ? "Favorites" : "All bookmarks";
 
   function go(next: View, folder: string | null = null) {
+    if (next === "tidy" && !pro) { router.push(links.plans); return; }   // AI tidy-up is a Pro feature
     setView(next); setFolderId(folder); setSel(null);
     if (!folder && next === "dash") { setInput(""); setQ(""); setFilters([]); }
     else if (next !== "dash" || folder) { setQ(""); setInput(""); setFilters([]); }
@@ -129,8 +131,9 @@ export function PortalApp({ name, fresh = false, sidebar = null, foldersOpen = f
           <details className="relative">
             <summary aria-label="Account" className="flex size-10 cursor-pointer list-none items-center justify-center rounded-full bg-sand text-sm font-semibold [&::-webkit-details-marker]:hidden">{initial}</summary>
             <div className="absolute right-0 z-20 mt-2 flex w-56 flex-col gap-3 rounded-[18px] border-[1.5px] border-ink bg-paper p-4">
-              <p className="truncate text-sm">{name ?? "Signed in"}</p>
-              <Link href="/plans" className="text-sm">Plans</Link>
+              <p className="flex items-center justify-between gap-2 text-sm"><span className="truncate">{name ?? "Signed in"}</span><span className={`shrink-0 rounded-pill border border-ink px-2 py-0.5 text-xs ${pro ? "bg-lime" : ""}`}>{pro ? "Pro" : "Free"}</span></p>
+              <Link href={links.billing} className="text-sm">Plan &amp; billing</Link>
+              {!pro && <Link href={links.plans} className="text-sm">Upgrade to Pro</Link>}
               <SignOutButton />
             </div>
           </details>
@@ -142,7 +145,7 @@ export function PortalApp({ name, fresh = false, sidebar = null, foldersOpen = f
           initial={sidebar} initialExpanded={foldersOpen} enter={enter} tick={tick}
           isDash={isDash} view={view} folderId={folderId}
           loadingFolderId={folderId && libFor !== libKey ? folderId : null}
-          filedLeft={dash?.filedLeft ?? 0} onGo={go}
+          filedLeft={dash?.filedLeft ?? 0} tidyLocked={!pro} onGo={go}
         />
 
         <main id="main" className="flex min-w-0 flex-[999_1_520px] flex-col gap-4 border-l border-ink px-8 py-6 max-md:border-l-0 max-md:px-6">
